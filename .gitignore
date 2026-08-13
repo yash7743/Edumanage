@@ -1,0 +1,11 @@
+node_modules/
+.env
+dist/
+build/
+server/uploads/materials/*
+server/uploads/assignments/*
+server/uploads/submissions/*
+server/uploads/labmanuals/*
+!server/uploads/**/.gitkeep
+*.log
+.DS_Store
