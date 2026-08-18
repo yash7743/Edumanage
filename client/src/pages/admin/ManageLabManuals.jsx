@@ -22,9 +22,14 @@ const ManageLabManuals = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const [m, s] = await Promise.all([api.get('/lab-manuals'), api.get('/subjects', { params: { limit: 100 } })]);
-      setManuals(m.data.data);
-      setSubjects(s.data.data);
+      const [m, s] = await Promise.all([
+        api.get('/lab-manuals'), 
+        api.get('/subjects', { params: { limit: 100 } })
+      ]);
+      setManuals(m.data?.data || []);
+      setSubjects(s.data?.data || []);
+    } catch (err) {
+      toast.error('Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -35,6 +40,10 @@ const ManageLabManuals = () => {
   }, []);
 
   const openCreate = () => {
+    if (subjects.length === 0) {
+      toast.error('Please create at least one Subject before adding a Lab Manual');
+      return;
+    }
     setEditing(null);
     setForm({ ...EMPTY, subject: subjects[0]?._id || '' });
     setFile(null);
@@ -43,23 +52,36 @@ const ManageLabManuals = () => {
 
   const openEdit = (m) => {
     setEditing(m);
-    setForm({ title: m.title, subject: m.subject?._id, description: m.description });
+    setForm({ 
+      title: m.title || '', 
+      subject: m.subject?._id || m.subject || '', 
+      description: m.description || '' 
+    });
     setFile(null);
     setModalOpen(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!form.subject) {
+      return toast.error('Please select a valid subject');
+    }
+
+    if (!editing && !file) {
+      return toast.error('Please attach a PDF file');
+    }
+
     setSaving(true);
     const fd = new FormData();
     Object.entries(form).forEach(([k, v]) => fd.append(k, v));
     if (file) fd.append('file', file);
+
     try {
       if (editing) {
         await api.put(`/lab-manuals/${editing._id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
         toast.success('Lab manual updated');
       } else {
-        if (!file) return toast.error('Please attach a PDF');
         await api.post('/lab-manuals', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
         toast.success('Lab manual created');
       }
@@ -120,12 +142,22 @@ const ManageLabManuals = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="label">Title</label>
-            <input required className="input-field" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            <input 
+              required 
+              className="input-field" 
+              value={form.title} 
+              onChange={(e) => setForm({ ...form, title: e.target.value })} 
+            />
           </div>
           <div>
             <label className="label">Subject</label>
-            <select required className="input-field" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })}>
-              <option value="">Select subject</option>
+            <select 
+              required 
+              className="input-field" 
+              value={form.subject} 
+              onChange={(e) => setForm({ ...form, subject: e.target.value })}
+            >
+              <option value="" disabled>Select subject</option>
               {subjects.map((s) => (
                 <option key={s._id} value={s._id}>
                   {s.code} — {s.name}
@@ -135,11 +167,21 @@ const ManageLabManuals = () => {
           </div>
           <div>
             <label className="label">Description</label>
-            <textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            <textarea 
+              className="input-field" 
+              rows={2} 
+              value={form.description} 
+              onChange={(e) => setForm({ ...form, description: e.target.value })} 
+            />
           </div>
           <div>
             <label className="label">PDF File {editing ? '(leave empty to keep current)' : ''}</label>
-            <input type="file" accept=".pdf" className="input-field" onChange={(e) => setFile(e.target.files[0])} />
+            <input 
+              type="file" 
+              accept=".pdf" 
+              className="input-field" 
+              onChange={(e) => setFile(e.target.files[0])} 
+            />
           </div>
           <button type="submit" disabled={saving} className="btn-primary w-full">
             {saving ? 'Saving...' : editing ? 'Update' : 'Create'}
