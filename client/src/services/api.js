@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: 'https://edumanage-server-2wgg.onrender.com/api',
   withCredentials: true, // send httpOnly JWT cookie automatically
   headers: { 'Content-Type': 'application/json' },
 });
