@@ -23,21 +23,45 @@ connectDB();
 
 const app = express();
 
-// --- Security middleware ---
-app.use(helmet());
+// --- Security & CORS Configuration ---
 app.use(
-  cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    credentials: true,
+  helmet({
+    crossOriginResourcePolicy: false,
+    crossOriginEmbedderPolicy: false,
   })
 );
+
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://edumanage-steel.vercel.app',
+  process.env.CLIENT_URL,
+].filter(Boolean);
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS blocked for origin: ${origin}`));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Handle all preflight requests
+
+// --- Parsers & Sanitization ---
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());
-app.use(mongoSanitize()); // strips $ / . operators from req.body/query/params
-app.use(xss()); // sanitizes user input to prevent XSS
+app.use(mongoSanitize()); // Strips $ / . operators
+app.use(xss()); // Sanitizes user input
 
-// General API rate limit
+// --- Rate Limiting ---
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -53,15 +77,13 @@ app.use('/api/chapters', chapterRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/lab-manuals', labManualRoutes);
-app.use('/api', userRoutes); // /api/students, /api/admins, /api/dashboard/stats
+app.use('/api', userRoutes);
 
-app.get('/api/health', (req, res) => res.json({ success: true, message: 'EduManage API is running.' }));
+app.get('/api/health', (req, res) =>
+  res.json({ success: true, message: 'EduManage API is running.' })
+);
 
-// NOTE: uploaded files are intentionally NOT served via express.static.
-// All downloads go through authenticated controller routes (see chapter/
-// assignment/submission/labManual controllers) so files require a valid
-// session and pass through role checks before being sent.
-
+// --- Error Handlers ---
 app.use(notFound);
 app.use(errorHandler);
 
