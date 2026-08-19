@@ -39,25 +39,49 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   'https://edumanage-steel.vercel.app',
+  'https://edumanage-frontend-yozw.onrender.com',
   process.env.CLIENT_URL,
 ].filter(Boolean);
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS blocked for origin: ${origin}`));
+    // Allow requests without an Origin header
+    // (Postman, server-to-server requests, etc.)
+    if (!origin) {
+      return callback(null, true);
     }
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    console.log('CORS blocked origin:', origin);
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
+
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+
+  methods: [
+    'GET',
+    'POST',
+    'PUT',
+    'DELETE',
+    'PATCH',
+    'OPTIONS',
+  ],
+
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+  ],
+
   optionsSuccessStatus: 200,
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Handle all preflight requests
+app.options('*', cors(corsOptions));
 
 // Parsers & Sanitization
 app.use(express.json({ limit: '2mb' }));
