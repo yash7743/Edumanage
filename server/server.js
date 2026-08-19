@@ -23,6 +23,9 @@ connectDB();
 
 const app = express();
 
+// Trust proxy for rate-limiting and cookies on Render/Vercel
+app.set('trust proxy', 1);
+
 // --- Security & CORS Configuration ---
 app.use(
   helmet({
@@ -49,17 +52,18 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  optionsSuccessStatus: 200,
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Handle all preflight requests
+app.options('*', cors(corsOptions)); // Preflight handler for all routes
 
 // --- Parsers & Sanitization ---
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());
-app.use(mongoSanitize()); // Strips $ / . operators
-app.use(xss()); // Sanitizes user input
+app.use(mongoSanitize());
+app.use(xss());
 
 // --- Rate Limiting ---
 const apiLimiter = rateLimit({
@@ -71,7 +75,10 @@ const apiLimiter = rateLimit({
 app.use('/api', apiLimiter);
 
 // --- Routes ---
+// Mount auth on both /api/auth and /api to prevent 404 route mismatches
 app.use('/api/auth', authRoutes);
+app.use('/api', authRoutes);
+
 app.use('/api/subjects', subjectRoutes);
 app.use('/api/chapters', chapterRoutes);
 app.use('/api/assignments', assignmentRoutes);
