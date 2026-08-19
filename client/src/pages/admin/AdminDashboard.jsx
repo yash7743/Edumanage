@@ -1,85 +1,102 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
-import Loader from '../../components/common/Loader';
-import { useAuth } from '../../context/AuthContext';
+import toast from 'react-hot-toast';
 
-const StatCard = ({ label, value, icon }) => (
-  <div className="card">
-    <div className="text-2xl">{icon}</div>
-    <div className="text-2xl font-bold mt-2">{value}</div>
-    <div className="text-sm text-gray-500">{label}</div>
-  </div>
-);
+const AdminLogin = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
-const AdminDashboard = () => {
-  const { user } = useAuth();
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const { data } = await api.get('/dashboard/stats');
-        setStats(data.data);
-      } finally {
-        setLoading(false);
+    try {
+      // Calls /api/auth/login or /api/login on your Render server
+      const { data } = await api.post('/auth/login', {
+        email,
+        password,
+      });
+
+      toast.success(data.message || 'Login successful!');
+
+      if (data.token) {
+        localStorage.setItem('token', data.token);
       }
-    };
-    load();
-  }, []);
+      if (data.data?.user || data.user) {
+        localStorage.setItem('user', JSON.stringify(data.data?.user || data.user));
+      }
 
-  if (loading) return <Loader />;
+      navigate('/admin/dashboard');
+    } catch (err) {
+      const errorMsg =
+        err.response?.data?.message ||
+        (err.message === 'Network Error'
+          ? 'Backend server is waking up or unreachable. Please retry in a few seconds.'
+          : 'Invalid credentials');
+      toast.error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500">Welcome, {user?.name}</p>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        <StatCard label="Students" value={stats.totalStudents} icon="🎓" />
-        <StatCard label="Subjects" value={stats.totalSubjects} icon="📚" />
-        <StatCard label="Chapters" value={stats.totalChapters} icon="📖" />
-        <StatCard label="Assignments" value={stats.totalAssignments} icon="📝" />
-        <StatCard label="Lab Manuals" value={stats.totalLabManuals} icon="🧪" />
-        <StatCard label="Pending" value={stats.pendingSubmissions} icon="⏳" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card">
-          <h2 className="font-semibold mb-3">Recent Submissions</h2>
-          {stats.recentSubmissions.length === 0 ? (
-            <p className="text-sm text-gray-500">No recent submissions.</p>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {stats.recentSubmissions.map((s) => (
-                <li key={s._id} className="py-2 text-sm flex justify-between">
-                  <span>{s.student?.name} — {s.assignment?.title}</span>
-                  <span className="text-gray-400">{new Date(s.submittedAt).toLocaleDateString()}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
+      <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 space-y-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900">EduManage</h1>
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary-600 mt-1">
+            Admin Login
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Super Admin, Content Admin & Faculty Admin sign in here
+          </p>
         </div>
-        <div className="card">
-          <h2 className="font-semibold mb-3">Upcoming Deadlines (7 days)</h2>
-          {stats.upcomingDeadlines.length === 0 ? (
-            <p className="text-sm text-gray-500">Nothing due soon.</p>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {stats.upcomingDeadlines.map((a) => (
-                <li key={a._id} className="py-2 text-sm flex justify-between">
-                  <span>{a.title}</span>
-                  <span className="text-amber-600">{new Date(a.deadline).toLocaleDateString()}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="superadmin@edumanage.local"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Password</label>
+            <input
+              type="password"
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="••••••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-2.5 px-4 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-semibold transition disabled:opacity-50"
+          >
+            {loading ? 'Signing In...' : 'Sign In'}
+          </button>
+        </form>
+
+        <div className="text-center">
+          <Link to="/login" className="text-xs text-primary-600 hover:underline">
+            Student? Go to Student Login
+          </Link>
         </div>
       </div>
     </div>
   );
 };
 
-export default AdminDashboard;
+export default AdminLogin;

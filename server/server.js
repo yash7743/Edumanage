@@ -23,10 +23,10 @@ connectDB();
 
 const app = express();
 
-// Trust proxy for rate-limiting and cookies on Render/Vercel
+// Trust proxy for secure cross-domain cookies and rate limiting
 app.set('trust proxy', 1);
 
-// --- Security & CORS Configuration ---
+// Security Headers
 app.use(
   helmet({
     crossOriginResourcePolicy: false,
@@ -34,6 +34,7 @@ app.use(
   })
 );
 
+// Dynamic CORS Configuration
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
@@ -56,16 +57,16 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Preflight handler for all routes
+app.options('*', cors(corsOptions)); // Handle all preflight requests
 
-// --- Parsers & Sanitization ---
+// Parsers & Sanitizers
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());
 app.use(mongoSanitize());
 app.use(xss());
 
-// --- Rate Limiting ---
+// Rate Limiting
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -74,8 +75,7 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 
-// --- Routes ---
-// Mount auth on both /api/auth and /api to prevent 404 route mismatches
+// Routes (Mounted on both /api/auth and /api to prevent endpoint mismatches)
 app.use('/api/auth', authRoutes);
 app.use('/api', authRoutes);
 
@@ -90,7 +90,7 @@ app.get('/api/health', (req, res) =>
   res.json({ success: true, message: 'EduManage API is running.' })
 );
 
-// --- Error Handlers ---
+// Error Handling
 app.use(notFound);
 app.use(errorHandler);
 

@@ -2,16 +2,30 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: 'https://edumanage-server-2wgg.onrender.com/api',
-  withCredentials: true, // send httpOnly JWT cookie automatically
-  headers: { 'Content-Type': 'application/json' },
+  withCredentials: true, // Sends cross-domain cookies automatically
+  headers: {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  },
 });
 
-// Redirect to login on 401 (session expired) for any authenticated page
+// Attach bearer token if stored in localStorage
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Automatic redirect on expired sessions
 api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401 && !window.location.pathname.includes('login')) {
-      window.location.href = '/login';
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/admin/login';
     }
     return Promise.reject(err);
   }
