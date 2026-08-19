@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://edumanage-server-2wgq.onrender.com/api',
+  baseURL: 'https://edumanage-backend-zdcc.onrender.com/api',
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
