@@ -1,15 +1,15 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://edumanage-server-2wgg.onrender.com/api',
-  withCredentials: true, // Sends cross-domain cookies automatically
+  baseURL: 'https://edumanage-server-2wgq.onrender.com/api',
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
   },
 });
 
-// Automatically attach JWT from localStorage if token is stored there
+// Attach token from localStorage if available
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -18,7 +18,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Redirect to login on expired session
+// Redirect on session expiry
 api.interceptors.response.use(
   (res) => res,
   (err) => {
