@@ -23,7 +23,7 @@ connectDB();
 
 const app = express();
 
-// Trust proxy for secure cross-domain cookies and rate limiting
+// Required for secure cookies & rate limiting behind reverse proxies (Render/Vercel)
 app.set('trust proxy', 1);
 
 // Security Headers
@@ -34,7 +34,7 @@ app.use(
   })
 );
 
-// Dynamic CORS Configuration
+// Dynamic CORS configuration
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
@@ -59,14 +59,14 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Handle all preflight requests
 
-// Parsers & Sanitizers
+// Parsers & Sanitization
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());
 app.use(mongoSanitize());
 app.use(xss());
 
-// Rate Limiting
+// General API rate limit
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -75,7 +75,8 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 
-// Routes (Mounted on both /api/auth and /api to prevent endpoint mismatches)
+// --- Routes ---
+// Mounted on both /api/auth and /api so neither /api/login nor /api/auth/login fails with 404
 app.use('/api/auth', authRoutes);
 app.use('/api', authRoutes);
 
