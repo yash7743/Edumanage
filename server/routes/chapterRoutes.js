@@ -12,7 +12,6 @@ const {
 } = require('../controllers/chapterController');
 const { protect, authorize } = require('../middleware/auth');
 
-// Multer Storage Configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, path.join(__dirname, '..', 'uploads', 'materials'));
@@ -29,7 +28,6 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 },
 });
 
-// Routes
 router.route('/')
   .get(protect, getChapters)
   .post(protect, authorize('admin'), upload.single('materialFile'), createChapter);

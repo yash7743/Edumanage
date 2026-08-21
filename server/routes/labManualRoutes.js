@@ -12,7 +12,6 @@ const {
 } = require('../controllers/labManualController');
 const { protect, authorize } = require('../middleware/auth');
 
-// Multer Storage Configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, path.join(__dirname, '..', 'uploads', 'labmanuals'));
@@ -26,10 +25,9 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB limit
+  limits: { fileSize: 25 * 1024 * 1024 },
 });
 
-// Routes
 router.route('/')
   .get(protect, getLabManuals)
   .post(protect, authorize('admin'), upload.single('file'), createLabManual);
