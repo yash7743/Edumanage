@@ -1,6 +1,7 @@
 require('dotenv').config();
 require('dns').setServers(['8.8.8.8', '8.8.4.4']);
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -20,18 +21,33 @@ const submissionRoutes = require('./routes/submissionRoutes');
 const labManualRoutes = require('./routes/labManualRoutes');
 const userRoutes = require('./routes/userRoutes');
 
+// Ensure upload folders exist on start (vital for Render free tier restarts)
+const uploadDirs = [
+  path.join(__dirname, 'uploads'),
+  path.join(__dirname, 'uploads', 'materials'),
+  path.join(__dirname, 'uploads', 'labmanuals'),
+  path.join(__dirname, 'uploads', 'submissions'),
+  path.join(__dirname, 'uploads', 'assignments'),
+];
+
+uploadDirs.forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
+
 connectDB();
 
 const app = express();
 
-// Required for secure cookies & rate limiting behind reverse proxies (Render/Vercel)
 app.set('trust proxy', 1);
 
 // Security Headers (Allows inline file previews and embeds in iframes)
 app.use(
   helmet({
-    crossOriginResourcePolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
     crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: false,
   })
 );
 
@@ -46,48 +62,40 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin) {
+    if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
     console.log('CORS blocked origin:', origin);
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
-
   credentials: true,
-
-  methods: [
-    'GET',
-    'POST',
-    'PUT',
-    'DELETE',
-    'PATCH',
-    'OPTIONS',
-  ],
-
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type',
     'Authorization',
     'X-Requested-With',
     'Accept',
   ],
-
   optionsSuccessStatus: 200,
 };
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
-// Serve uploaded files statically for in-browser viewing & downloads
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Serve uploaded files statically with cross-origin headers
+app.use(
+  '/uploads',
+  (req, res, next) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    next();
+  },
+  express.static(path.join(__dirname, 'uploads'))
+);
 
 // Parsers & Sanitization
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 app.use(mongoSanitize());
 app.use(xss());
@@ -95,7 +103,7 @@ app.use(xss());
 // General API rate limit
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -103,8 +111,6 @@ app.use('/api', apiLimiter);
 
 // --- Routes ---
 app.use('/api/auth', authRoutes);
-app.use('/api', authRoutes);
-
 app.use('/api/subjects', subjectRoutes);
 app.use('/api/chapters', chapterRoutes);
 app.use('/api/assignments', assignmentRoutes);

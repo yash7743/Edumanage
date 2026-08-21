@@ -27,6 +27,7 @@ const StudentAssignments = () => {
       setAssignments(a.data?.data || []);
       setMySubmissions(s.data?.data || []);
     } catch (err) {
+      console.error('LOAD ERROR:', err);
       toast.error('Failed to load assignments');
     } finally {
       setLoading(false);
@@ -45,7 +46,9 @@ const StudentAssignments = () => {
   }, [viewingDoc]);
 
   const submissionFor = (assignmentId) =>
-    mySubmissions.find((s) => s.assignment?._id === assignmentId || s.assignment === assignmentId);
+    mySubmissions.find(
+      (s) => s.assignment?._id === assignmentId || s.assignment === assignmentId
+    );
 
   const handleViewAssignment = async (assignment) => {
     if (!assignment.file?.storedName) {
@@ -54,15 +57,18 @@ const StudentAssignments = () => {
 
     try {
       setViewLoading(true);
-      setViewingDoc({ title: assignment.title, url: null });
+      setViewingDoc({ title: `Question Sheet: ${assignment.title}`, url: null });
 
       const res = await api.get(`/assignments/${assignment._id}/view`, {
         responseType: 'blob',
+        headers: {
+          Accept: assignment.file?.mimeType || 'application/pdf, */*',
+        },
       });
 
       if (viewingDoc?.url) URL.revokeObjectURL(viewingDoc.url);
 
-      const mimeType = assignment.file?.mimeType || 'application/pdf';
+      const mimeType = res.data?.type || assignment.file?.mimeType || 'application/pdf';
       const blob = new Blob([res.data], { type: mimeType });
       const objectUrl = URL.createObjectURL(blob);
 
@@ -71,7 +77,8 @@ const StudentAssignments = () => {
         url: objectUrl,
       });
     } catch (err) {
-      toast.error('Unable to open document for viewing');
+      console.error('VIEW ASSIGNMENT ERROR:', err);
+      toast.error('Unable to open document for viewing.');
       setViewingDoc(null);
     } finally {
       setViewLoading(false);
@@ -85,15 +92,18 @@ const StudentAssignments = () => {
 
     try {
       setViewLoading(true);
-      setViewingDoc({ title: 'My Submission', url: null });
+      setViewingDoc({ title: `My Submission: ${assignmentTitle}`, url: null });
 
       const res = await api.get(`/submissions/${submission._id}/view`, {
         responseType: 'blob',
+        headers: {
+          Accept: submission.file?.mimeType || 'application/pdf, */*',
+        },
       });
 
       if (viewingDoc?.url) URL.revokeObjectURL(viewingDoc.url);
 
-      const mimeType = submission.file?.mimeType || 'application/pdf';
+      const mimeType = res.data?.type || submission.file?.mimeType || 'application/pdf';
       const blob = new Blob([res.data], { type: mimeType });
       const objectUrl = URL.createObjectURL(blob);
 
@@ -102,7 +112,8 @@ const StudentAssignments = () => {
         url: objectUrl,
       });
     } catch (err) {
-      toast.error('Unable to preview your submission');
+      console.error('VIEW SUBMISSION ERROR:', err);
+      toast.error('Unable to preview your submission.');
       setViewingDoc(null);
     } finally {
       setViewLoading(false);
@@ -112,8 +123,12 @@ const StudentAssignments = () => {
   const handleDownload = async (assignmentId, filename, mimeType) => {
     const toastId = toast.loading('Downloading file...');
     try {
-      const res = await api.get(`/assignments/${assignmentId}/download`, { responseType: 'blob' });
-      const blob = new Blob([res.data], { type: mimeType || 'application/octet-stream' });
+      const res = await api.get(`/assignments/${assignmentId}/download`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([res.data], {
+        type: mimeType || 'application/octet-stream',
+      });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -216,9 +231,13 @@ const StudentAssignments = () => {
                         )}
                       </>
                     ) : overdue ? (
-                      <span className="badge bg-red-50 text-red-700">Overdue — not submitted</span>
+                      <span className="badge bg-red-50 text-red-700">
+                        Overdue — not submitted
+                      </span>
                     ) : (
-                      <span className="badge bg-gray-100 text-gray-600">Pending submission</span>
+                      <span className="badge bg-gray-100 text-gray-600">
+                        Pending submission
+                      </span>
                     )}
                   </div>
                 </div>
@@ -233,7 +252,9 @@ const StudentAssignments = () => {
                         View & Learn
                       </button>
                       <button
-                        onClick={() => handleDownload(a._id, a.file.originalName, a.file.mimeType)}
+                        onClick={() =>
+                          handleDownload(a._id, a.file.originalName, a.file.mimeType)
+                        }
                         className="btn-secondary text-xs px-3 py-2 flex-1 text-center"
                       >
                         Download
@@ -256,18 +277,31 @@ const StudentAssignments = () => {
 
       {/* Document Viewer Modal (Inline Reading) */}
       <Modal open={!!viewingDoc} title={viewingDoc?.title || 'Document Viewer'} onClose={closeViewer}>
-        <div className="w-full h-[75vh] flex flex-col">
+        <div className="w-full h-[78vh] flex flex-col">
           {viewLoading ? (
             <div className="m-auto text-center">
               <Loader />
               <p className="text-sm text-gray-500 mt-2">Loading document...</p>
             </div>
           ) : viewingDoc?.url ? (
-            <iframe
-              src={`${viewingDoc.url}#toolbar=1&navpanes=0`}
-              title={viewingDoc.title}
-              className="w-full h-full rounded border border-gray-200"
-            />
+            <div className="w-full h-full flex flex-col">
+              <div className="flex justify-between items-center bg-gray-50 px-3 py-2 border-b border-gray-200 text-xs">
+                <span className="text-gray-600 truncate mr-2">{viewingDoc?.title}</span>
+                <a
+                  href={viewingDoc.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary-600 hover:underline font-semibold flex-shrink-0"
+                >
+                  Open in New Tab ↗
+                </a>
+              </div>
+              <iframe
+                src={`${viewingDoc.url}#toolbar=1&navpanes=0`}
+                title={viewingDoc.title}
+                className="w-full flex-1 rounded-b border-0"
+              />
+            </div>
           ) : (
             <div className="m-auto text-center text-sm text-gray-500">
               Unable to load preview.
@@ -277,7 +311,11 @@ const StudentAssignments = () => {
       </Modal>
 
       {/* Submission Modal */}
-      <Modal open={!!active} title={`Submit Assignment: ${active?.title || ''}`} onClose={() => setActive(null)}>
+      <Modal
+        open={!!active}
+        title={`Submit Assignment: ${active?.title || ''}`}
+        onClose={() => setActive(null)}
+      >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="label block text-xs font-medium text-gray-700 mb-1">
@@ -291,7 +329,11 @@ const StudentAssignments = () => {
               required
             />
           </div>
-          <button type="submit" disabled={submitting} className="btn-primary w-full py-2.5">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="btn-primary w-full py-2.5"
+          >
             {submitting ? 'Uploading...' : 'Submit Assignment'}
           </button>
         </form>
