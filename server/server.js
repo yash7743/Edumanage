@@ -1,5 +1,6 @@
 require('dotenv').config();
 require('dns').setServers(['8.8.8.8', '8.8.4.4']);
+const path = require('path');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -26,7 +27,7 @@ const app = express();
 // Required for secure cookies & rate limiting behind reverse proxies (Render/Vercel)
 app.set('trust proxy', 1);
 
-// Security Headers
+// Security Headers (Allows inline file previews and embeds in iframes)
 app.use(
   helmet({
     crossOriginResourcePolicy: false,
@@ -45,8 +46,6 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests without an Origin header
-    // (Postman, server-to-server requests, etc.)
     if (!origin) {
       return callback(null, true);
     }
@@ -83,6 +82,9 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
+// Serve uploaded files statically for in-browser viewing & downloads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // Parsers & Sanitization
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
@@ -100,7 +102,6 @@ const apiLimiter = rateLimit({
 app.use('/api', apiLimiter);
 
 // --- Routes ---
-// Mounted on both /api/auth and /api so neither /api/login nor /api/auth/login fails with 404
 app.use('/api/auth', authRoutes);
 app.use('/api', authRoutes);
 
@@ -121,6 +122,6 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });

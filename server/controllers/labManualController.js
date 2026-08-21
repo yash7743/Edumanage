@@ -89,4 +89,27 @@ const downloadLabManual = async (req, res, next) => {
   }
 };
 
-module.exports = { getLabManuals, createLabManual, updateLabManual, deleteLabManual, downloadLabManual };
+const viewLabManual = async (req, res, next) => {
+  try {
+    const manual = await LabManual.findById(req.params.id);
+    if (!manual) return res.status(404).json({ success: false, message: 'Lab manual not found.' });
+    const filePath = path.join(__dirname, '..', 'uploads', 'labmanuals', manual.file.storedName);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, message: 'File missing.' });
+
+    // Set headers for in-browser rendering
+    res.setHeader('Content-Type', manual.file.mimeType || 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${manual.file.originalName}"`);
+    res.sendFile(filePath);
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = {
+  getLabManuals,
+  createLabManual,
+  updateLabManual,
+  deleteLabManual,
+  downloadLabManual,
+  viewLabManual,
+};

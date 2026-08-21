@@ -86,7 +86,7 @@ const deleteChapter = async (req, res, next) => {
   }
 };
 
-// Authenticated download — never serve /uploads directly as static files
+// Authenticated download
 const downloadMaterial = async (req, res, next) => {
   try {
     const chapter = await Chapter.findById(req.params.id);
@@ -103,4 +103,31 @@ const downloadMaterial = async (req, res, next) => {
   }
 };
 
-module.exports = { getChapters, createChapter, updateChapter, deleteChapter, downloadMaterial };
+// Authenticated inline view
+const viewMaterial = async (req, res, next) => {
+  try {
+    const chapter = await Chapter.findById(req.params.id);
+    if (!chapter || !chapter.materialFile?.storedName) {
+      return res.status(404).json({ success: false, message: 'Material not found.' });
+    }
+    const filePath = path.join(__dirname, '..', 'uploads', 'materials', chapter.materialFile.storedName);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'File missing on server.' });
+    }
+
+    res.setHeader('Content-Type', chapter.materialFile.mimeType || 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${chapter.materialFile.originalName}"`);
+    res.sendFile(filePath);
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = {
+  getChapters,
+  createChapter,
+  updateChapter,
+  deleteChapter,
+  downloadMaterial,
+  viewMaterial,
+};

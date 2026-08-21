@@ -101,6 +101,25 @@ const downloadAssignmentFile = async (req, res, next) => {
   }
 };
 
+const viewAssignmentFile = async (req, res, next) => {
+  try {
+    const assignment = await Assignment.findById(req.params.id);
+    if (!assignment || !assignment.file?.storedName) {
+      return res.status(404).json({ success: false, message: 'File not found.' });
+    }
+    const filePath = path.join(__dirname, '..', 'uploads', 'assignments', assignment.file.storedName);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'File missing on server.' });
+    }
+
+    res.setHeader('Content-Type', assignment.file.mimeType || 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${assignment.file.originalName}"`);
+    res.sendFile(filePath);
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getAssignments,
   getAssignmentById,
@@ -108,4 +127,5 @@ module.exports = {
   updateAssignment,
   deleteAssignment,
   downloadAssignmentFile,
+  viewAssignmentFile,
 };
