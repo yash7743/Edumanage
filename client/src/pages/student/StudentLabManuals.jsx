@@ -46,14 +46,19 @@ const StudentLabManuals = () => {
 
       const res = await api.get(`/lab-manuals/${manual._id}/view`, {
         responseType: 'blob',
+        headers: {
+          Accept: manual.file?.mimeType || 'application/pdf, */*',
+        },
       });
 
       if (viewUrl) URL.revokeObjectURL(viewUrl);
 
-      const blob = new Blob([res.data], { type: manual.file?.mimeType || 'application/pdf' });
+      const blobType = res.data?.type || manual.file?.mimeType || 'application/pdf';
+      const blob = new Blob([res.data], { type: blobType });
       const objectUrl = URL.createObjectURL(blob);
       setViewUrl(objectUrl);
     } catch (err) {
+      console.error('VIEW ERROR:', err);
       toast.error('Unable to open document for viewing');
       setViewingManual(null);
     } finally {
@@ -134,18 +139,31 @@ const StudentLabManuals = () => {
 
       {/* In-Browser PDF Modal Viewer */}
       <Modal open={!!viewingManual} title={viewingManual?.title || 'Lab Manual Viewer'} onClose={closeViewer}>
-        <div className="w-full h-[75vh] flex flex-col">
+        <div className="w-full h-[78vh] flex flex-col">
           {viewLoading ? (
             <div className="m-auto text-center">
               <Loader />
               <p className="text-sm text-gray-500 mt-2">Loading manual preview...</p>
             </div>
           ) : viewUrl ? (
-            <iframe
-              src={`${viewUrl}#toolbar=1&navpanes=0`}
-              title={viewingManual?.title}
-              className="w-full h-full rounded border border-gray-200"
-            />
+            <div className="w-full h-full flex flex-col">
+              <div className="flex justify-between items-center bg-gray-50 px-3 py-2 border-b border-gray-200 text-xs">
+                <span className="text-gray-600 truncate mr-2">{viewingManual?.title}</span>
+                <a
+                  href={viewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary-600 hover:underline font-semibold flex-shrink-0"
+                >
+                  Open in New Tab ↗
+                </a>
+              </div>
+              <iframe
+                src={`${viewUrl}#toolbar=1&navpanes=0`}
+                title={viewingManual?.title || 'Lab Manual Preview'}
+                className="w-full flex-1 rounded-b border-0"
+              />
+            </div>
           ) : (
             <div className="m-auto text-center text-sm text-gray-500">
               Unable to load document preview.
