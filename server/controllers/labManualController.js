@@ -1,145 +1,152 @@
-const LabManual = require('../models/LabManual');
+const Chapter = require('../models/Chapter');
 const path = require('path');
 const fs = require('fs');
 
-const getLabManuals = async (req, res, next) => {
+const getChapters = async (req, res, next) => {
   try {
     const { subject } = req.query;
     const filter = {};
     if (subject) filter.subject = subject;
-    const manuals = await LabManual.find(filter)
-      .populate('subject', 'name code')
-      .sort({ createdAt: -1 });
-    res.json({ success: true, data: manuals });
+
+    const chapters = await Chapter.find(filter)
+      .populate('subject', 'name code semester')
+      .sort({ chapterNumber: 1, createdAt: 1 });
+
+    res.json({ success: true, data: chapters });
   } catch (err) {
     next(err);
   }
 };
 
-const createLabManual = async (req, res, next) => {
+const createChapter = async (req, res, next) => {
   try {
-    const { title, subject, chapter, description } = req.body;
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: 'PDF file is required.' });
-    }
+    const { title, chapterNumber, subject, description, notes, resourceUrl } = req.body;
 
-    const manual = await LabManual.create({
+    const chapterData = {
       title,
+      chapterNumber: Number(chapterNumber),
       subject,
-      chapter: chapter || undefined,
       description,
-      file: {
-        originalName: req.file.originalname,
-        storedName: req.file.filename,
-        path: `labmanuals/${req.file.filename}`,
-        mimeType: req.file.mimetype || 'application/pdf',
-        size: req.file.size,
-      },
+      notes,
+      resourceUrl,
       createdBy: req.user._id,
-    });
+    };
 
-    res.status(201).json({ success: true, data: manual });
-  } catch (err) {
-    next(err);
-  }
-};
-
-const updateLabManual = async (req, res, next) => {
-  try {
-    const updateData = { ...req.body };
     if (req.file) {
-      updateData.file = {
+      chapterData.materialFile = {
         originalName: req.file.originalname,
         storedName: req.file.filename,
-        path: `labmanuals/${req.file.filename}`,
+        path: `materials/${req.file.filename}`,
         mimeType: req.file.mimetype || 'application/pdf',
         size: req.file.size,
       };
     }
-    const manual = await LabManual.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-      runValidators: true,
-    });
-    if (!manual) {
-      return res.status(404).json({ success: false, message: 'Lab manual not found.' });
-    }
-    res.json({ success: true, data: manual });
+
+    const chapter = await Chapter.create(chapterData);
+    res.status(201).json({ success: true, data: chapter });
   } catch (err) {
     next(err);
   }
 };
 
-const deleteLabManual = async (req, res, next) => {
+const updateChapter = async (req, res, next) => {
   try {
-    const manual = await LabManual.findByIdAndDelete(req.params.id);
-    if (!manual) {
-      return res.status(404).json({ success: false, message: 'Lab manual not found.' });
+    const updateData = { ...req.body };
+    if (updateData.chapterNumber) {
+      updateData.chapterNumber = Number(updateData.chapterNumber);
     }
-    if (manual.file?.storedName) {
-      const filePath = path.resolve(__dirname, '..', 'uploads', 'labmanuals', manual.file.storedName);
+
+    if (req.file) {
+      updateData.materialFile = {
+        originalName: req.file.originalname,
+        storedName: req.file.filename,
+        path: `materials/${req.file.filename}`,
+        mimeType: req.file.mimetype || 'application/pdf',
+        size: req.file.size,
+      };
+    }
+
+    const chapter = await Chapter.findByIdAndUpdate(req.params.id, updateData, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!chapter) {
+      return res.status(404).json({ success: false, message: 'Chapter not found.' });
+    }
+
+    res.json({ success: true, data: chapter });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const deleteChapter = async (req, res, next) => {
+  try {
+    const chapter = await Chapter.findByIdAndDelete(req.params.id);
+    if (!chapter) {
+      return res.status(404).json({ success: false, message: 'Chapter not found.' });
+    }
+
+    if (chapter.materialFile?.storedName) {
+      const filePath = path.resolve(__dirname, '..', 'uploads', 'materials', chapter.materialFile.storedName);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
     }
-    res.json({ success: true, message: 'Lab manual deleted.' });
+
+    res.json({ success: true, message: 'Chapter and attached files deleted.' });
   } catch (err) {
     next(err);
   }
 };
 
-const downloadLabManual = async (req, res, next) => {
+const downloadMaterial = async (req, res, next) => {
   try {
-    const manual = await LabManual.findById(req.params.id);
-    if (!manual || !manual.file?.storedName) {
-      return res.status(404).json({ success: false, message: 'Lab manual or file record not found.' });
+    const chapter = await Chapter.findById(req.params.id);
+    if (!chapter || !chapter.materialFile?.storedName) {
+      return res.status(404).json({ success: false, message: 'Material file not found.' });
     }
-    const filePath = path.resolve(__dirname, '..', 'uploads', 'labmanuals', manual.file.storedName);
+
+    const filePath = path.resolve(__dirname, '..', 'uploads', 'materials', chapter.materialFile.storedName);
     if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ success: false, message: 'File is missing on the server storage.' });
+      return res.status(404).json({ success: false, message: 'File is missing on server storage.' });
     }
 
     res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
-    res.download(filePath, manual.file.originalName);
+    res.download(filePath, chapter.materialFile.originalName);
   } catch (err) {
     next(err);
   }
 };
 
-const viewLabManual = async (req, res, next) => {
+const viewMaterial = async (req, res, next) => {
   try {
-    const manual = await LabManual.findById(req.params.id);
-    if (!manual || !manual.file?.storedName) {
-      return res.status(404).json({ success: false, message: 'Lab manual or file record not found.' });
+    const chapter = await Chapter.findById(req.params.id);
+    if (!chapter || !chapter.materialFile?.storedName) {
+      return res.status(404).json({ success: false, message: 'Material file not found.' });
     }
 
-    const filePath = path.resolve(__dirname, '..', 'uploads', 'labmanuals', manual.file.storedName);
+    const filePath = path.resolve(__dirname, '..', 'uploads', 'materials', chapter.materialFile.storedName);
     if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ success: false, message: 'File is missing on the server storage.' });
+      return res.status(404).json({ success: false, message: 'File missing on server storage.' });
     }
 
-    const mimeType = manual.file.mimeType || 'application/pdf';
-    const stat = fs.statSync(filePath);
+    res.setHeader('Content-Type', chapter.materialFile.mimeType || 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${chapter.materialFile.originalName}"`);
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
 
-    res.writeHead(200, {
-      'Content-Type': mimeType,
-      'Content-Length': stat.size,
-      'Content-Disposition': `inline; filename="${manual.file.originalName}"`,
-      'Cross-Origin-Resource-Policy': 'cross-origin',
-      'Access-Control-Allow-Origin': '*',
-    });
-
-    const readStream = fs.createReadStream(filePath);
-    readStream.pipe(res);
+    res.sendFile(filePath);
   } catch (err) {
     next(err);
   }
 };
 
 module.exports = {
-  getLabManuals,
-  createLabManual,
-  updateLabManual,
-  deleteLabManual,
-  downloadLabManual,
-  viewLabManual,
+  getChapters,
+  createChapter,
+  updateChapter,
+  deleteChapter,
+  downloadMaterial,
+  viewMaterial,
 };
