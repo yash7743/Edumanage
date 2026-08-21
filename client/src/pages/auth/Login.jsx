@@ -38,18 +38,27 @@ const Login = () => {
         return;
       }
 
-      // Store auth payload in localStorage for authorization headers
+      // 1. Store token and user object synchronously in localStorage
       if (token) {
         localStorage.setItem('token', token);
       }
       localStorage.setItem('user', JSON.stringify(payload));
 
-      // Refresh AuthContext if refetch exists
-      if (authContext && typeof authContext.refetch === 'function') {
-        await authContext.refetch();
+      // 2. Update AuthContext state directly if login handler is provided
+      if (authContext?.login && typeof authContext.login === 'function') {
+        authContext.login(payload, token);
+      } else if (authContext?.setUser && typeof authContext.setUser === 'function') {
+        authContext.setUser(payload);
+      }
+
+      // 3. Optional non-blocking refetch
+      if (authContext?.refetch && typeof authContext.refetch === 'function') {
+        authContext.refetch().catch(() => {});
       }
 
       toast.success(res.data?.message || 'Login successful!');
+
+      // 4. Force immediate navigation to Student Dashboard
       navigate('/student/dashboard', { replace: true });
     } catch (err) {
       console.error('LOGIN ERROR:', err);
@@ -69,24 +78,18 @@ const Login = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 space-y-6">
-
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">
-            EduManage
-          </h1>
-
+          <h1 className="text-2xl font-bold text-gray-900">EduManage</h1>
           <p className="text-xs font-semibold uppercase tracking-wider text-primary-600 mt-1">
             Student Login
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               Email
             </label>
-
             <input
               type="email"
               required
@@ -102,7 +105,6 @@ const Login = () => {
             <label className="block text-xs font-medium text-gray-700 mb-1">
               Password
             </label>
-
             <input
               type="password"
               required
@@ -121,25 +123,16 @@ const Login = () => {
           >
             {loading ? 'Signing In...' : 'Sign In'}
           </button>
-
         </form>
 
         <div className="flex justify-between items-center text-xs text-primary-600">
-          <Link
-            to="/register"
-            className="hover:underline"
-          >
+          <Link to="/register" className="hover:underline">
             Create an account
           </Link>
-
-          <Link
-            to="/admin/login"
-            className="hover:underline"
-          >
+          <Link to="/admin/login" className="hover:underline">
             Admin Login
           </Link>
         </div>
-
       </div>
     </div>
   );
