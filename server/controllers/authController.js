@@ -1,5 +1,5 @@
 const User = require('../models/User');
-const generateToken = require('../utils/generateToken');
+const { generateToken, setTokenCookie, clearTokenCookie } = require('../utils/generateToken');
 
 // @desc    Register a new Student
 // @route   POST /api/auth/register (or /api/register)
@@ -49,12 +49,17 @@ const register = async (req, res, next) => {
       semester: semester ? Number(semester) : undefined,
     });
 
-    const token = generateToken(res, user._id);
+    const token = generateToken(user._id);
+    if (typeof setTokenCookie === 'function') {
+      setTokenCookie(res, token);
+    }
+
+    const userObject = typeof user.toSafeObject === 'function' ? user.toSafeObject() : user.toObject();
 
     res.status(201).json({
       success: true,
       data: {
-        ...user.toSafeObject(),
+        ...userObject,
         token,
       },
     });
@@ -94,7 +99,6 @@ const login = async (req, res, next) => {
       });
     }
 
-    // Uses your model's comparePassword method
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({
@@ -103,12 +107,17 @@ const login = async (req, res, next) => {
       });
     }
 
-    const token = generateToken(res, user._id);
+    const token = generateToken(user._id);
+    if (typeof setTokenCookie === 'function') {
+      setTokenCookie(res, token);
+    }
+
+    const userObject = typeof user.toSafeObject === 'function' ? user.toSafeObject() : user.toObject();
 
     res.json({
       success: true,
       data: {
-        ...user.toSafeObject(),
+        ...userObject,
         token,
       },
     });
@@ -127,9 +136,11 @@ const getMe = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
 
+    const userObject = typeof user.toSafeObject === 'function' ? user.toSafeObject() : user.toObject();
+
     res.json({
       success: true,
-      data: user.toSafeObject(),
+      data: userObject,
     });
   } catch (err) {
     next(err);
@@ -140,10 +151,14 @@ const getMe = async (req, res, next) => {
 // @route   POST /api/auth/logout
 // @access  Public
 const logout = async (req, res) => {
-  res.cookie('token', '', {
-    httpOnly: true,
-    expires: new Date(0),
-  });
+  if (typeof clearTokenCookie === 'function') {
+    clearTokenCookie(res);
+  } else {
+    res.cookie('token', '', {
+      httpOnly: true,
+      expires: new Date(0),
+    });
+  }
   res.json({ success: true, message: 'Logged out successfully.' });
 };
 
