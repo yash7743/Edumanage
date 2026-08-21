@@ -33,7 +33,7 @@ const createChapter = async (req, res, next) => {
         originalName: req.file.originalname,
         storedName: req.file.filename,
         path: `materials/${req.file.filename}`,
-        mimeType: req.file.mimetype,
+        mimeType: req.file.mimetype || 'application/pdf',
         size: req.file.size,
       };
     }
@@ -54,7 +54,7 @@ const updateChapter = async (req, res, next) => {
         originalName: req.file.originalname,
         storedName: req.file.filename,
         path: `materials/${req.file.filename}`,
-        mimeType: req.file.mimetype,
+        mimeType: req.file.mimetype || 'application/pdf',
         size: req.file.size,
       };
     }
@@ -63,7 +63,11 @@ const updateChapter = async (req, res, next) => {
       new: true,
       runValidators: true,
     });
-    if (!chapter) return res.status(404).json({ success: false, message: 'Chapter not found.' });
+
+    if (!chapter) {
+      return res.status(404).json({ success: false, message: 'Chapter not found.' });
+    }
+
     res.json({ success: true, data: chapter });
   } catch (err) {
     next(err);
@@ -73,11 +77,15 @@ const updateChapter = async (req, res, next) => {
 const deleteChapter = async (req, res, next) => {
   try {
     const chapter = await Chapter.findByIdAndDelete(req.params.id);
-    if (!chapter) return res.status(404).json({ success: false, message: 'Chapter not found.' });
+    if (!chapter) {
+      return res.status(404).json({ success: false, message: 'Chapter not found.' });
+    }
 
     if (chapter.materialFile?.storedName) {
       const filePath = path.join(__dirname, '..', 'uploads', 'materials', chapter.materialFile.storedName);
-      fs.existsSync(filePath) && fs.unlinkSync(filePath);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
     }
 
     res.json({ success: true, message: 'Chapter deleted.' });
@@ -91,12 +99,16 @@ const downloadMaterial = async (req, res, next) => {
   try {
     const chapter = await Chapter.findById(req.params.id);
     if (!chapter || !chapter.materialFile?.storedName) {
-      return res.status(404).json({ success: false, message: 'Material not found.' });
+      return res.status(404).json({ success: false, message: 'Material file not found in record.' });
     }
-    const filePath = path.join(__dirname, '..', 'uploads', 'materials', chapter.materialFile.storedName);
+
+    const filePath = path.resolve(__dirname, '..', 'uploads', 'materials', chapter.materialFile.storedName);
+
     if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ success: false, message: 'File missing on server.' });
+      return res.status(404).json({ success: false, message: 'File is missing on the server storage.' });
     }
+
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
     res.download(filePath, chapter.materialFile.originalName);
   } catch (err) {
     next(err);
@@ -110,14 +122,26 @@ const viewMaterial = async (req, res, next) => {
     if (!chapter || !chapter.materialFile?.storedName) {
       return res.status(404).json({ success: false, message: 'Material not found.' });
     }
-    const filePath = path.join(__dirname, '..', 'uploads', 'materials', chapter.materialFile.storedName);
+
+    const filePath = path.resolve(__dirname, '..', 'uploads', 'materials', chapter.materialFile.storedName);
+
     if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ success: false, message: 'File missing on server.' });
+      return res.status(404).json({ success: false, message: 'File missing on server storage.' });
     }
 
-    res.setHeader('Content-Type', chapter.materialFile.mimeType || 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${chapter.materialFile.originalName}"`);
-    res.sendFile(filePath);
+    const mimeType = chapter.materialFile.mimeType || 'application/pdf';
+    const stat = fs.statSync(filePath);
+
+    res.writeHead(200, {
+      'Content-Type': mimeType,
+      'Content-Length': stat.size,
+      'Content-Disposition': `inline; filename="${chapter.materialFile.originalName}"`,
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    const readStream = fs.createReadStream(filePath);
+    readStream.pipe(res);
   } catch (err) {
     next(err);
   }

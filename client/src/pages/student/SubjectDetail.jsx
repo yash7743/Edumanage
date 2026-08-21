@@ -40,17 +40,24 @@ const SubjectDetail = () => {
   const handleViewMaterial = async (endpoint, docTitle, mimeType = 'application/pdf') => {
     try {
       setViewLoading(true);
-      setViewingDoc({ title: docTitle });
+      setViewingDoc({ title: docTitle, endpoint, mimeType });
 
-      const res = await api.get(endpoint, { responseType: 'blob' });
+      const res = await api.get(endpoint, {
+        responseType: 'blob',
+        headers: {
+          Accept: mimeType || 'application/pdf, */*',
+        },
+      });
 
       if (viewUrl) URL.revokeObjectURL(viewUrl);
 
-      const blob = new Blob([res.data], { type: mimeType });
+      const resolvedType = res.data?.type || mimeType || 'application/pdf';
+      const blob = new Blob([res.data], { type: resolvedType });
       const objectUrl = URL.createObjectURL(blob);
       setViewUrl(objectUrl);
-    } catch {
-      toast.error('Unable to open document for viewing');
+    } catch (err) {
+      console.error('VIEW ERROR:', err);
+      toast.error('Unable to open document for viewing.');
       setViewingDoc(null);
     } finally {
       setViewLoading(false);
@@ -61,11 +68,11 @@ const SubjectDetail = () => {
     const toastId = toast.loading('Preparing download...');
     try {
       const res = await api.get(endpoint, { responseType: 'blob' });
-      const blob = new Blob([res.data], { type: mimeType });
+      const blob = new Blob([res.data], { type: mimeType || 'application/octet-stream' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = defaultFilename;
+      a.download = defaultFilename || 'document';
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -170,7 +177,7 @@ const SubjectDetail = () => {
                             handleViewMaterial(
                               `/chapters/${c._id}/view`,
                               `Chapter ${c.chapterNumber}: ${c.title}`,
-                              c.materialFile.mimeType
+                              c.materialFile.mimeType || 'application/pdf'
                             )
                           }
                           className="btn-primary text-xs px-3 py-1.5"
@@ -181,7 +188,7 @@ const SubjectDetail = () => {
                           onClick={() =>
                             handleDownload(
                               `/chapters/${c._id}/download`,
-                              c.materialFile.originalName,
+                              c.materialFile.originalName || `${c.title}.pdf`,
                               c.materialFile.mimeType
                             )
                           }
@@ -225,7 +232,11 @@ const SubjectDetail = () => {
                   <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
                     <button
                       onClick={() =>
-                        handleViewMaterial(`/lab-manuals/${m._id}/view`, m.title, m.file?.mimeType)
+                        handleViewMaterial(
+                          `/lab-manuals/${m._id}/view`,
+                          m.title,
+                          m.file?.mimeType || 'application/pdf'
+                        )
                       }
                       className="btn-primary text-xs px-3 py-1.5 flex-1 text-center"
                     >
@@ -270,7 +281,11 @@ const SubjectDetail = () => {
                     {a.file?.storedName && (
                       <button
                         onClick={() =>
-                          handleViewMaterial(`/assignments/${a._id}/view`, a.title, a.file?.mimeType)
+                          handleViewMaterial(
+                            `/assignments/${a._id}/view`,
+                            a.title,
+                            a.file?.mimeType || 'application/pdf'
+                          )
                         }
                         className="btn-secondary text-xs px-3 py-1.5"
                       >
@@ -288,22 +303,39 @@ const SubjectDetail = () => {
         </div>
       )}
 
-      {/* In-Browser PDF Document Modal */}
+      {/* In-Browser Document Modal */}
       <Modal open={!!viewingDoc} title={viewingDoc?.title || 'Document Viewer'} onClose={closeViewer}>
-        <div className="w-full h-[75vh] flex flex-col">
+        <div className="w-full h-[78vh] flex flex-col">
           {viewLoading ? (
             <div className="m-auto text-center">
               <Loader />
               <p className="text-sm text-gray-500 mt-2">Loading document...</p>
             </div>
           ) : viewUrl ? (
-            <iframe
-              src={`${viewUrl}#toolbar=1&navpanes=0`}
-              title={viewingDoc?.title}
-              className="w-full h-full rounded border border-gray-200"
-            />
+            <div className="w-full h-full flex flex-col">
+              <div className="flex justify-between items-center bg-gray-50 px-3 py-2 border-b border-gray-200 text-xs">
+                <span className="text-gray-600 truncate mr-2">{viewingDoc?.title}</span>
+                <div className="flex gap-2 flex-shrink-0">
+                  <a
+                    href={viewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary-600 hover:underline font-semibold"
+                  >
+                    Open in New Tab ↗
+                  </a>
+                </div>
+              </div>
+              <iframe
+                src={`${viewUrl}#toolbar=1&navpanes=0`}
+                title={viewingDoc?.title || 'Document Preview'}
+                className="w-full flex-1 rounded-b border-0"
+              />
+            </div>
           ) : (
-            <div className="m-auto text-center text-sm text-gray-500">Unable to load document preview.</div>
+            <div className="m-auto text-center text-sm text-gray-500">
+              Unable to load document preview.
+            </div>
           )}
         </div>
       </Modal>
