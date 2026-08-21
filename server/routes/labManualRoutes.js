@@ -1,7 +1,7 @@
 const express = require('express');
-const { protect, authorize } = require('../middleware/auth');
-const { requireAdminRole } = require('../middleware/role');
-const { createUploader } = require('../middleware/upload');
+const router = express.Router();
+const path = require('path');
+const multer = require('multer');
 const {
   getLabManuals,
   createLabManual,
@@ -10,26 +10,35 @@ const {
   downloadLabManual,
   viewLabManual,
 } = require('../controllers/labManualController');
+const { protect, authorize } = require('../middleware/auth');
 
-const router = express.Router();
-const uploadManual = createUploader('labmanuals');
+// Multer Storage Configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, '..', 'uploads', 'labmanuals'));
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const uniqueName = `lab-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    cb(null, uniqueName);
+  },
+});
 
-// Require authentication for all routes
-router.use(protect);
+const upload = multer({
+  storage,
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB limit
+});
 
-// Routes accessible to both Students and Admins
-router.get('/', getLabManuals);
-router.get('/:id/view', viewLabManual);
-router.get('/:id/download', downloadLabManual);
+// Routes
+router.route('/')
+  .get(protect, getLabManuals)
+  .post(protect, authorize('admin'), upload.single('file'), createLabManual);
 
-// Admin-only management routes
-const adminGuard =
-  typeof requireAdminRole === 'function'
-    ? requireAdminRole('super_admin', 'content_admin')
-    : authorize('admin');
+router.route('/:id')
+  .put(protect, authorize('admin'), upload.single('file'), updateLabManual)
+  .delete(protect, authorize('admin'), deleteLabManual);
 
-router.post('/', adminGuard, uploadManual.single('file'), createLabManual);
-router.put('/:id', adminGuard, uploadManual.single('file'), updateLabManual);
-router.delete('/:id', adminGuard, deleteLabManual);
+router.get('/:id/view', protect, viewLabManual);
+router.get('/:id/download', protect, downloadLabManual);
 
 module.exports = router;

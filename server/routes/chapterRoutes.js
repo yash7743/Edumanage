@@ -1,7 +1,7 @@
 const express = require('express');
-const { protect, authorize } = require('../middleware/auth');
-const { requireAdminRole } = require('../middleware/role');
-const { createUploader } = require('../middleware/upload');
+const router = express.Router();
+const path = require('path');
+const multer = require('multer');
 const {
   getChapters,
   createChapter,
@@ -10,25 +10,35 @@ const {
   downloadMaterial,
   viewMaterial,
 } = require('../controllers/chapterController');
+const { protect, authorize } = require('../middleware/auth');
 
-const router = express.Router();
-const uploadMaterial = createUploader('materials');
+// Multer Storage Configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, '..', 'uploads', 'materials'));
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const uniqueName = `material-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    cb(null, uniqueName);
+  },
+});
 
-// Require authentication for all chapter routes
-router.use(protect);
+const upload = multer({
+  storage,
+  limits: { fileSize: 25 * 1024 * 1024 },
+});
 
-// Routes accessible to both Students and Admins
-router.get('/', getChapters);
-router.get('/:id/view', viewMaterial);
-router.get('/:id/download', downloadMaterial);
+// Routes
+router.route('/')
+  .get(protect, getChapters)
+  .post(protect, authorize('admin'), upload.single('materialFile'), createChapter);
 
-// Admin-only management routes
-const adminGuard = typeof requireAdminRole === 'function' 
-  ? requireAdminRole('super_admin', 'content_admin') 
-  : authorize('admin');
+router.route('/:id')
+  .put(protect, authorize('admin'), upload.single('materialFile'), updateChapter)
+  .delete(protect, authorize('admin'), deleteChapter);
 
-router.post('/', adminGuard, uploadMaterial.single('materialFile'), createChapter);
-router.put('/:id', adminGuard, uploadMaterial.single('materialFile'), updateChapter);
-router.delete('/:id', adminGuard, deleteChapter);
+router.get('/:id/view', protect, viewMaterial);
+router.get('/:id/download', protect, downloadMaterial);
 
 module.exports = router;
