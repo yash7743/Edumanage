@@ -1,104 +1,135 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import Loader from '../../components/common/Loader';
 import toast from 'react-hot-toast';
 
-const AdminLogin = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+const AdminDashboard = () => {
+  const { user } = useAuth();
+  const [stats, setStats] = useState({
+    studentsCount: 0,
+    subjectsCount: 0,
+    assignmentsCount: 0,
+    submissionsCount: 0,
+    labManualsCount: 0,
+  });
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
 
-    try {
-      const res = await api.post('/auth/login', {
-        email: email.trim(),
-        password,
-      });
+        // Fetch multiple metrics safely in parallel
+        const [studentsRes, subjectsRes, assignmentsRes, manualsRes, submissionsRes] = await Promise.allSettled([
+          api.get('/users?role=student'),
+          api.get('/subjects'),
+          api.get('/assignments'),
+          api.get('/lab-manuals'),
+          api.get('/submissions'),
+        ]);
 
-      const payload = res.data?.data || res.data;
-      const token = payload?.token || res.data?.token;
+        setStats({
+          studentsCount: studentsRes.status === 'fulfilled' ? (studentsRes.value.data?.data?.length || studentsRes.value.data?.count || 0) : 0,
+          subjectsCount: subjectsRes.status === 'fulfilled' ? (subjectsRes.value.data?.data?.length || 0) : 0,
+          assignmentsCount: assignmentsRes.status === 'fulfilled' ? (assignmentsRes.value.data?.data?.length || 0) : 0,
+          labManualsCount: manualsRes.status === 'fulfilled' ? (manualsRes.value.data?.data?.length || 0) : 0,
+          submissionsCount: submissionsRes.status === 'fulfilled' ? (submissionsRes.value.data?.data?.length || 0) : 0,
+        });
 
-      // Ensure account has admin role
-      if (payload?.role !== 'admin') {
-        toast.error('Access denied. Please use the Student Login page.');
+        if (submissionsRes.status === 'fulfilled') {
+          const subs = submissionsRes.value.data?.data || [];
+          setRecentActivities(subs.slice(0, 5));
+        }
+      } catch (err) {
+        console.error('Dashboard load error:', err);
+        toast.error('Failed to load some dashboard metrics');
+      } finally {
         setLoading(false);
-        return;
       }
+    };
 
-      if (token) {
-        localStorage.setItem('token', token);
-      }
+    fetchDashboardData();
+  }, []);
 
-      localStorage.setItem('user', JSON.stringify(payload));
-
-      toast.success('Admin login successful!');
-      navigate('/admin/dashboard');
-    } catch (err) {
-      const errorMsg =
-        err.response?.data?.message ||
-        (err.message === 'Network Error'
-          ? 'Backend server is waking up or unreachable. Please retry in a few seconds.'
-          : 'Invalid email or password.');
-      toast.error(errorMsg);
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (loading) return <Loader />;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">EduManage</h1>
-          <p className="text-xs font-semibold uppercase tracking-wider text-primary-600 mt-1">
-            Admin Login
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            Super Admin, Content Admin & Faculty Admin sign in here
-          </p>
+    <div className="space-y-6">
+      {/* Welcome Banner */}
+      <div className="bg-gradient-to-r from-primary-600 to-indigo-700 text-white rounded-xl p-6 shadow-md">
+        <h1 className="text-2xl font-bold">
+          Welcome back, {user?.name || 'Administrator'}!
+        </h1>
+        <p className="text-primary-100 text-sm mt-1">
+          Role: <span className="font-semibold uppercase">{user?.adminRole?.replace('_', ' ') || 'Admin'}</span>
+        </p>
+      </div>
+
+      {/* Stats Overview Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="card p-5 border border-gray-100 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Students</p>
+            <h3 className="text-2xl font-bold text-gray-900 mt-1">{stats.studentsCount}</h3>
+          </div>
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg text-xl">👥</div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="card p-5 border border-gray-100 shadow-sm flex items-center justify-between">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="admin@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Active Subjects</p>
+            <h3 className="text-2xl font-bold text-gray-900 mt-1">{stats.subjectsCount}</h3>
           </div>
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg text-xl">📚</div>
+        </div>
 
+        <div className="card p-5 border border-gray-100 shadow-sm flex items-center justify-between">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Password</label>
-            <input
-              type="password"
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="••••••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Lab Manuals</p>
+            <h3 className="text-2xl font-bold text-gray-900 mt-1">{stats.labManualsCount}</h3>
           </div>
+          <div className="p-3 bg-amber-50 text-amber-600 rounded-lg text-xl">🧪</div>
+        </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2.5 px-4 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-semibold transition disabled:opacity-50"
+        <div className="card p-5 border border-gray-100 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assignments</p>
+            <h3 className="text-2xl font-bold text-gray-900 mt-1">{stats.assignmentsCount}</h3>
+          </div>
+          <div className="p-3 bg-purple-50 text-purple-600 rounded-lg text-xl">📝</div>
+        </div>
+      </div>
+
+      {/* Quick Navigation Cards */}
+      <div className="card p-6 border border-gray-100">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Management Actions</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <Link
+            to="/admin/subjects"
+            className="p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border text-center transition font-medium text-sm text-gray-700 block"
           >
-            {loading ? 'Signing In...' : 'Sign In'}
-          </button>
-        </form>
-
-        <div className="text-center">
-          <Link to="/login" className="text-xs text-primary-600 hover:underline">
-            Student? Go to Student Login
+            Manage Subjects & Chapters
+          </Link>
+          <Link
+            to="/admin/lab-manuals"
+            className="p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border text-center transition font-medium text-sm text-gray-700 block"
+          >
+            Manage Lab Manuals
+          </Link>
+          <Link
+            to="/admin/assignments"
+            className="p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border text-center transition font-medium text-sm text-gray-700 block"
+          >
+            Manage Assignments
+          </Link>
+          <Link
+            to="/admin/students"
+            className="p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border text-center transition font-medium text-sm text-gray-700 block"
+          >
+            Manage Students
           </Link>
         </div>
       </div>
@@ -106,4 +137,4 @@ const AdminLogin = () => {
   );
 };
 
-export default AdminLogin;
+export default AdminDashboard;

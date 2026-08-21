@@ -38,6 +38,7 @@ function App() {
       {/* Student area */}
       <Route element={<ProtectedRoute allowedRoles={['student']} />}>
         <Route path="/student" element={<StudentLayout />}>
+          <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<StudentDashboard />} />
           <Route path="subjects" element={<Subjects />} />
           <Route path="subjects/:id" element={<SubjectDetail />} />
@@ -51,6 +52,7 @@ function App() {
       {/* Admin area — one login, three sub-roles gated per-page below */}
       <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
         <Route path="/admin" element={<AdminLayout />}>
+          <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
 
           <Route element={<ProtectedRoute allowedRoles={['admin']} allowedAdminRoles={['super_admin', 'faculty_admin', 'content_admin']} />}>
