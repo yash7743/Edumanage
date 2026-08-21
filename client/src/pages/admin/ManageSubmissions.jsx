@@ -13,11 +13,18 @@ const ManageSubmissions = () => {
   const [feedback, setFeedback] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Document Viewer State
+  const [viewingSubmission, setViewingSubmission] = useState(null);
+  const [viewUrl, setViewUrl] = useState(null);
+  const [viewLoading, setViewLoading] = useState(false);
+
   const load = async () => {
     setLoading(true);
     try {
       const { data } = await api.get('/submissions');
-      setSubmissions(data.data);
+      setSubmissions(data.data || []);
+    } catch (err) {
+      toast.error('Failed to load submissions');
     } finally {
       setLoading(false);
     }
@@ -27,24 +34,69 @@ const ManageSubmissions = () => {
     load();
   }, []);
 
+  // Cleanup object URLs to avoid memory leaks
+  useEffect(() => {
+    return () => {
+      if (viewUrl) URL.revokeObjectURL(viewUrl);
+    };
+  }, [viewUrl]);
+
   const openEvaluate = (s) => {
     setActive(s);
     setMarks(s.marks ?? '');
     setFeedback(s.feedback ?? '');
   };
 
-  const handleDownload = async (id, filename) => {
+  const handleView = async (submission) => {
+    if (!submission.file?.storedName) {
+      return toast.error('No attached file for this submission');
+    }
+
+    try {
+      setViewLoading(true);
+      setViewingSubmission(submission);
+
+      const response = await api.get(`/submissions/${submission._id}/view`, {
+        responseType: 'blob',
+      });
+
+      if (viewUrl) URL.revokeObjectURL(viewUrl);
+
+      const mimeType = submission.file?.mimeType || 'application/pdf';
+      const blob = new Blob([response.data], { type: mimeType });
+      const objectUrl = URL.createObjectURL(blob);
+      setViewUrl(objectUrl);
+    } catch (err) {
+      toast.error('Unable to open submission preview');
+      setViewingSubmission(null);
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
+  const handleDownload = async (id, filename, mimeType) => {
+    const toastId = toast.loading('Downloading submission...');
     try {
       const res = await api.get(`/submissions/${id}/download`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const blob = new Blob([res.data], { type: mimeType || 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename || 'submission';
+      a.download = filename || 'submission.pdf';
+      document.body.appendChild(a);
       a.click();
+      a.remove();
       window.URL.revokeObjectURL(url);
+      toast.success('Downloaded successfully', { id: toastId });
     } catch {
-      toast.error('Download failed');
+      toast.error('Download failed', { id: toastId });
     }
+  };
+
+  const closeViewer = () => {
+    if (viewUrl) URL.revokeObjectURL(viewUrl);
+    setViewUrl(null);
+    setViewingSubmission(null);
   };
 
   const handleEvaluate = async (e) => {
@@ -75,37 +127,64 @@ const ManageSubmissions = () => {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b border-gray-100">
-                <th className="py-2 pr-4">Student</th>
-                <th className="py-2 pr-4">Assignment</th>
-                <th className="py-2 pr-4">Submitted</th>
-                <th className="py-2 pr-4">Status</th>
-                <th className="py-2 pr-4">Marks</th>
-                <th className="py-2">Actions</th>
+                <th className="py-2.5 pr-4">Student</th>
+                <th className="py-2.5 pr-4">Assignment</th>
+                <th className="py-2.5 pr-4">Submitted</th>
+                <th className="py-2.5 pr-4">Status</th>
+                <th className="py-2.5 pr-4">Marks</th>
+                <th className="py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody>
               {submissions.map((s) => (
-                <tr key={s._id} className="border-b border-gray-50 last:border-0">
-                  <td className="py-2 pr-4">{s.student?.name}</td>
-                  <td className="py-2 pr-4">{s.assignment?.title}</td>
-                  <td className="py-2 pr-4">{new Date(s.submittedAt).toLocaleDateString()}</td>
-                  <td className="py-2 pr-4">
+                <tr key={s._id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition">
+                  <td className="py-3 pr-4">
+                    <div className="font-medium text-gray-900">{s.student?.name}</div>
+                    <div className="text-xs text-gray-400">{s.student?.studentId || s.student?.email}</div>
+                  </td>
+                  <td className="py-3 pr-4 text-gray-800 font-medium">{s.assignment?.title}</td>
+                  <td className="py-3 pr-4 text-gray-500">{new Date(s.submittedAt).toLocaleDateString()}</td>
+                  <td className="py-3 pr-4">
                     <span
                       className={`badge ${
-                        s.status === 'evaluated' ? 'bg-green-50 text-green-700' : s.status === 'late' ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
+                        s.status === 'evaluated'
+                          ? 'bg-green-50 text-green-700'
+                          : s.status === 'late'
+                          ? 'bg-red-50 text-red-700'
+                          : 'bg-blue-50 text-blue-700'
                       }`}
                     >
                       {s.status}
                     </span>
                   </td>
-                  <td className="py-2 pr-4">{s.marks ?? '—'} / {s.assignment?.maxMarks}</td>
-                  <td className="py-2 flex gap-2">
-                    <button onClick={() => handleDownload(s._id, s.file?.originalName)} className="btn-secondary text-xs">
-                      Download
-                    </button>
-                    <button onClick={() => openEvaluate(s)} className="btn-primary text-xs">
-                      Evaluate
-                    </button>
+                  <td className="py-3 pr-4 font-medium text-gray-700">
+                    {s.marks ?? '—'} / {s.assignment?.maxMarks}
+                  </td>
+                  <td className="py-3">
+                    <div className="flex gap-2 items-center flex-wrap">
+                      {s.file?.storedName && (
+                        <>
+                          <button
+                            onClick={() => handleView(s)}
+                            className="btn-primary text-xs px-2.5 py-1.5"
+                          >
+                            View Work
+                          </button>
+                          <button
+                            onClick={() => handleDownload(s._id, s.file?.originalName, s.file?.mimeType)}
+                            className="btn-secondary text-xs px-2.5 py-1.5"
+                          >
+                            Download
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => openEvaluate(s)}
+                        className="text-xs font-semibold px-2.5 py-1.5 text-primary-600 bg-primary-50 hover:bg-primary-100 rounded transition"
+                      >
+                        Evaluate
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -114,6 +193,33 @@ const ManageSubmissions = () => {
         </div>
       )}
 
+      {/* Submission Document Preview Modal */}
+      <Modal
+        open={!!viewingSubmission}
+        title={`Submission: ${viewingSubmission?.student?.name || ''} — ${viewingSubmission?.assignment?.title || ''}`}
+        onClose={closeViewer}
+      >
+        <div className="w-full h-[75vh] flex flex-col">
+          {viewLoading ? (
+            <div className="m-auto text-center">
+              <Loader />
+              <p className="text-sm text-gray-500 mt-2">Loading document preview...</p>
+            </div>
+          ) : viewUrl ? (
+            <iframe
+              src={`${viewUrl}#toolbar=1&navpanes=0`}
+              title={viewingSubmission?.assignment?.title}
+              className="w-full h-full rounded border border-gray-200"
+            />
+          ) : (
+            <div className="m-auto text-center text-sm text-gray-500">
+              Unable to display document preview.
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Evaluate Modal */}
       <Modal open={!!active} title={`Evaluate: ${active?.student?.name || ''}`} onClose={() => setActive(null)}>
         <form onSubmit={handleEvaluate} className="space-y-4">
           <div>
@@ -130,7 +236,13 @@ const ManageSubmissions = () => {
           </div>
           <div>
             <label className="label">Feedback</label>
-            <textarea className="input-field" rows={3} value={feedback} onChange={(e) => setFeedback(e.target.value)} />
+            <textarea
+              className="input-field"
+              rows={3}
+              placeholder="Provide constructive feedback for the student..."
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+            />
           </div>
           <button type="submit" disabled={saving} className="btn-primary w-full">
             {saving ? 'Saving...' : 'Save Evaluation'}

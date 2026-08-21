@@ -14,28 +14,35 @@ const AdminLogin = () => {
     setLoading(true);
 
     try {
-      // Calls /api/auth/login or /api/login on your Render server
-      const { data } = await api.post('/auth/login', {
-        email,
+      const res = await api.post('/auth/login', {
+        email: email.trim(),
         password,
       });
 
-      toast.success(data.message || 'Login successful!');
+      const payload = res.data?.data || res.data;
+      const token = payload?.token || res.data?.token;
 
-      if (data.token) {
-        localStorage.setItem('token', data.token);
-      }
-      if (data.data?.user || data.user) {
-        localStorage.setItem('user', JSON.stringify(data.data?.user || data.user));
+      // Ensure account has admin role
+      if (payload?.role !== 'admin') {
+        toast.error('Access denied. Please use the Student Login page.');
+        setLoading(false);
+        return;
       }
 
+      if (token) {
+        localStorage.setItem('token', token);
+      }
+
+      localStorage.setItem('user', JSON.stringify(payload));
+
+      toast.success('Admin login successful!');
       navigate('/admin/dashboard');
     } catch (err) {
       const errorMsg =
         err.response?.data?.message ||
         (err.message === 'Network Error'
           ? 'Backend server is waking up or unreachable. Please retry in a few seconds.'
-          : 'Invalid credentials');
+          : 'Invalid email or password.');
       toast.error(errorMsg);
     } finally {
       setLoading(false);
@@ -62,7 +69,7 @@ const AdminLogin = () => {
               type="email"
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="superadmin@edumanage.local"
+              placeholder="admin@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />

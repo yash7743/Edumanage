@@ -1,5 +1,4 @@
 const Submission = require('../models/Submission');
-const Assignment = require('../models/Assignment');
 const path = require('path');
 const fs = require('fs');
 
@@ -90,4 +89,34 @@ const downloadSubmissionFile = async (req, res, next) => {
   }
 };
 
-module.exports = { getSubmissions, createSubmission, updateSubmission, downloadSubmissionFile };
+// Authenticated inline viewing for student submissions
+const viewSubmissionFile = async (req, res, next) => {
+  try {
+    const submission = await Submission.findById(req.params.id);
+    if (!submission || !submission.file?.storedName) {
+      return res.status(404).json({ success: false, message: 'Submission file not found.' });
+    }
+
+    // Students may only view their own submission file
+    if (req.user.role === 'student' && String(submission.student) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
+    const filePath = path.join(__dirname, '..', 'uploads', 'submissions', submission.file.storedName);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, message: 'File missing.' });
+
+    res.setHeader('Content-Type', submission.file.mimeType || 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${submission.file.originalName}"`);
+    res.sendFile(filePath);
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = {
+  getSubmissions,
+  createSubmission,
+  updateSubmission,
+  downloadSubmissionFile,
+  viewSubmissionFile,
+};

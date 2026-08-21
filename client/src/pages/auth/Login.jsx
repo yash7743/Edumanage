@@ -10,7 +10,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
-  const { refetch } = useAuth();
+  const authContext = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,34 +23,42 @@ const Login = () => {
     setLoading(true);
 
     try {
-      // Login request
-      const { data } = await api.post('/auth/login', {
+      const res = await api.post('/auth/login', {
         email: email.trim(),
         password,
       });
 
-      console.log('LOGIN RESPONSE:', data);
+      const payload = res.data?.data || res.data;
+      const token = payload?.token || res.data?.token;
 
-      if (!data?.success) {
-        throw new Error(data?.message || 'Login failed');
+      // Ensure student isn't using an admin-only credential here
+      if (payload?.role === 'admin') {
+        toast.error('Admin account detected. Please use the Admin Login page.');
+        setLoading(false);
+        return;
       }
 
-      // Backend uses httpOnly cookie authentication.
-      // Refresh AuthContext so ProtectedRoute knows the user is logged in.
-      await refetch();
+      // Store auth payload in localStorage for authorization headers
+      if (token) {
+        localStorage.setItem('token', token);
+      }
+      localStorage.setItem('user', JSON.stringify(payload));
 
-      toast.success(data.message || 'Login successful!');
+      // Refresh AuthContext if refetch exists
+      if (authContext && typeof authContext.refetch === 'function') {
+        await authContext.refetch();
+      }
 
-      // Your actual student dashboard route
+      toast.success(res.data?.message || 'Login successful!');
       navigate('/student/dashboard', { replace: true });
-
     } catch (err) {
       console.error('LOGIN ERROR:', err);
 
       const errorMsg =
         err.response?.data?.message ||
-        err.message ||
-        'Login failed. Please try again.';
+        (err.message === 'Network Error'
+          ? 'Backend server is waking up or unreachable. Please retry in a few seconds.'
+          : 'Invalid email or password.');
 
       toast.error(errorMsg);
     } finally {

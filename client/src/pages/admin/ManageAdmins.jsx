@@ -23,14 +23,18 @@ const ManageAdmins = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/admins');
-      setAdmins(data.data);
+      const res = await api.get('/admins');
+      setAdmins(res.data?.data || []);
+    } catch (err) {
+      toast.error('Failed to load admin accounts');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const openCreate = () => {
     setForm(EMPTY);
@@ -39,10 +43,25 @@ const ManageAdmins = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!form.name.trim() || !form.email.trim()) {
+      return toast.error('Name and email are required');
+    }
+
+    if (form.password.length < 8) {
+      return toast.error('Password must be at least 8 characters long');
+    }
+
     setSaving(true);
     try {
-      await api.post('/admins', form);
-      toast.success('Admin account created');
+      await api.post('/admins', {
+        name: form.name.trim(),
+        email: form.email.trim().toLowerCase(),
+        password: form.password,
+        adminRole: form.adminRole,
+      });
+
+      toast.success('Admin account created successfully');
       setModalOpen(false);
       load();
     } catch (err) {
@@ -53,6 +72,11 @@ const ManageAdmins = () => {
   };
 
   const handleToggleStatus = async (admin) => {
+    const actionText = admin.isActive ? 'deactivate' : 'reactivate';
+    if (!window.confirm(`Are you sure you want to ${actionText} ${admin.name}?`)) {
+      return;
+    }
+
     try {
       await api.put(`/admins/${admin._id}/toggle-status`);
       toast.success(admin.isActive ? 'Admin deactivated' : 'Admin reactivated');
@@ -85,30 +109,39 @@ const ManageAdmins = () => {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b border-gray-100">
-                <th className="py-2 pr-4">Name</th>
-                <th className="py-2 pr-4">Email</th>
-                <th className="py-2 pr-4">Role</th>
-                <th className="py-2 pr-4">Status</th>
-                <th className="py-2 pr-4">Created</th>
-                <th className="py-2">Actions</th>
+                <th className="py-2.5 pr-4">Name</th>
+                <th className="py-2.5 pr-4">Email</th>
+                <th className="py-2.5 pr-4">Role</th>
+                <th className="py-2.5 pr-4">Status</th>
+                <th className="py-2.5 pr-4">Created</th>
+                <th className="py-2.5">Actions</th>
               </tr>
             </thead>
             <tbody>
               {admins.map((a) => (
-                <tr key={a._id} className="border-b border-gray-50 last:border-0">
-                  <td className="py-2 pr-4">{a.name}</td>
-                  <td className="py-2 pr-4">{a.email}</td>
-                  <td className="py-2 pr-4">
-                    <span className="badge bg-primary-50 text-primary-700">{ROLE_LABELS[a.adminRole]}</span>
+                <tr key={a._id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition">
+                  <td className="py-3 pr-4 font-medium text-gray-900">{a.name}</td>
+                  <td className="py-3 pr-4 text-gray-600">{a.email}</td>
+                  <td className="py-3 pr-4">
+                    <span className="badge bg-primary-50 text-primary-700 font-medium">
+                      {ROLE_LABELS[a.adminRole] || a.adminRole || 'Admin'}
+                    </span>
                   </td>
-                  <td className="py-2 pr-4">
+                  <td className="py-3 pr-4">
                     <span className={`badge ${a.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {a.isActive ? 'Active' : 'Deactivated'}
                     </span>
                   </td>
-                  <td className="py-2 pr-4">{new Date(a.createdAt).toLocaleDateString()}</td>
-                  <td className="py-2">
-                    <button onClick={() => handleToggleStatus(a)} className="text-xs font-medium text-primary-600">
+                  <td className="py-3 pr-4 text-gray-500">{new Date(a.createdAt).toLocaleDateString()}</td>
+                  <td className="py-3">
+                    <button
+                      onClick={() => handleToggleStatus(a)}
+                      className={`text-xs font-semibold px-2.5 py-1 rounded transition ${
+                        a.isActive
+                          ? 'text-amber-700 bg-amber-50 hover:bg-amber-100'
+                          : 'text-green-700 bg-green-50 hover:bg-green-100'
+                      }`}
+                    >
                       {a.isActive ? 'Deactivate' : 'Reactivate'}
                     </button>
                   </td>
@@ -119,15 +152,29 @@ const ManageAdmins = () => {
         </div>
       )}
 
+      {/* Add Admin Modal */}
       <Modal open={modalOpen} title="Add Admin" onClose={() => setModalOpen(false)}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="label">Full Name</label>
-            <input required className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <input
+              required
+              className="input-field"
+              placeholder="e.g. John Doe"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
           </div>
           <div>
             <label className="label">Email</label>
-            <input type="email" required className="input-field" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <input
+              type="email"
+              required
+              className="input-field"
+              placeholder="admin@edumanage.com"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
           </div>
           <div>
             <label className="label">Password</label>
@@ -136,14 +183,19 @@ const ManageAdmins = () => {
               minLength={8}
               required
               className="input-field"
+              placeholder="••••••••••••"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
             />
-            <p className="text-xs text-gray-400 mt-1">At least 8 characters</p>
+            <p className="text-xs text-gray-400 mt-1">Must be at least 8 characters long</p>
           </div>
           <div>
             <label className="label">Admin Role</label>
-            <select className="input-field" value={form.adminRole} onChange={(e) => setForm({ ...form, adminRole: e.target.value })}>
+            <select
+              className="input-field"
+              value={form.adminRole}
+              onChange={(e) => setForm({ ...form, adminRole: e.target.value })}
+            >
               <option value="content_admin">Content Admin</option>
               <option value="faculty_admin">Faculty Admin</option>
               <option value="super_admin">Super Admin</option>
