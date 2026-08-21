@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../../services/api';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
-import Modal from '../../components/common/Modal';
+import DocViewerModal from '../../components/common/DocViewerModal';
 import toast from 'react-hot-toast';
 
 const StudentLabManuals = () => {
@@ -137,40 +137,14 @@ const StudentLabManuals = () => {
         </div>
       )}
 
-      {/* In-Browser PDF Modal Viewer */}
-      <Modal open={!!viewingManual} title={viewingManual?.title || 'Lab Manual Viewer'} onClose={closeViewer}>
-        <div className="w-full h-[78vh] flex flex-col">
-          {viewLoading ? (
-            <div className="m-auto text-center">
-              <Loader />
-              <p className="text-sm text-gray-500 mt-2">Loading manual preview...</p>
-            </div>
-          ) : viewUrl ? (
-            <div className="w-full h-full flex flex-col">
-              <div className="flex justify-between items-center bg-gray-50 px-3 py-2 border-b border-gray-200 text-xs">
-                <span className="text-gray-600 truncate mr-2">{viewingManual?.title}</span>
-                <a
-                  href={viewUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-primary-600 hover:underline font-semibold flex-shrink-0"
-                >
-                  Open in New Tab ↗
-                </a>
-              </div>
-              <iframe
-                src={`${viewUrl}#toolbar=1&navpanes=0`}
-                title={viewingManual?.title || 'Lab Manual Preview'}
-                className="w-full flex-1 rounded-b border-0"
-              />
-            </div>
-          ) : (
-            <div className="m-auto text-center text-sm text-gray-500">
-              Unable to load document preview.
-            </div>
-          )}
-        </div>
-      </Modal>
+      {/* Unified In-Browser Document Viewer Modal */}
+      <DocViewerModal
+        open={!!viewingManual}
+        title={viewingManual?.title || 'Lab Manual Viewer'}
+        docUrl={viewUrl}
+        loading={viewLoading}
+        onClose={closeViewer}
+      />
     </div>
   );
 };
