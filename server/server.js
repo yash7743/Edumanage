@@ -21,7 +21,7 @@ const submissionRoutes = require('./routes/submissionRoutes');
 const labManualRoutes = require('./routes/labManualRoutes');
 const userRoutes = require('./routes/userRoutes');
 
-// Ensure upload folders exist on start (vital for Render free tier restarts)
+// Ensure upload folders exist
 const uploadDirs = [
   path.join(__dirname, 'uploads'),
   path.join(__dirname, 'uploads', 'materials'),
@@ -42,31 +42,20 @@ const app = express();
 
 app.set('trust proxy', 1);
 
-// Security Headers (Allows inline file previews and embeds in iframes)
+// Permissive Helmet headers for cross-origin file embedding
 app.use(
   helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginResourcePolicy: false,
     crossOriginEmbedderPolicy: false,
     contentSecurityPolicy: false,
   })
 );
 
-// Dynamic CORS configuration
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'https://edumanage-steel.vercel.app',
-  'https://edumanage-frontend-yozw.onrender.com',
-  process.env.CLIENT_URL,
-].filter(Boolean);
-
+// Bulletproof CORS: Reflects origin dynamically to satisfy credentials: true
 const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    console.log('CORS blocked origin:', origin);
-    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  origin: (origin, callback) => {
+    // Allows all incoming origins while supporting credentials
+    callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -75,6 +64,14 @@ const corsOptions = {
     'Authorization',
     'X-Requested-With',
     'Accept',
+    'Range',
+    'Origin',
+  ],
+  exposedHeaders: [
+    'Content-Disposition',
+    'Content-Length',
+    'Content-Type',
+    'Accept-Ranges',
   ],
   optionsSuccessStatus: 200,
 };
@@ -82,20 +79,23 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
-// Serve uploaded files statically with cross-origin headers
-app.use(
-  '/uploads',
-  (req, res, next) => {
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    next();
-  },
-  express.static(path.join(__dirname, 'uploads'))
-);
+// Explicit fallback header injector for all routes & files
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+});
+
+// Static file access
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Parsers & Sanitization
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 app.use(cookieParser());
 app.use(mongoSanitize());
 app.use(xss());
@@ -103,7 +103,7 @@ app.use(xss());
 // General API rate limit
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 1000,
+  max: 2000,
   standardHeaders: true,
   legacyHeaders: false,
 });
