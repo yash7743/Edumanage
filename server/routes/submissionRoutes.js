@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/auth');
 const { requireAdminRole } = require('../middleware/role');
 const { createUploader } = require('../middleware/upload');
 const {
@@ -19,6 +19,12 @@ router.get('/', getSubmissions);
 router.get('/:id/view', viewSubmissionFile);
 router.get('/:id/download', downloadSubmissionFile);
 router.post('/', uploadSubmission.single('file'), createSubmission);
-router.put('/:id', requireAdminRole('super_admin', 'faculty_admin'), updateSubmission);
+
+const facultyAdminGuard =
+  typeof requireAdminRole === 'function'
+    ? requireAdminRole('super_admin', 'faculty_admin')
+    : authorize('admin');
+
+router.put('/:id', facultyAdminGuard, updateSubmission);
 
 module.exports = router;

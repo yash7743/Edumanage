@@ -7,7 +7,9 @@ const getLabManuals = async (req, res, next) => {
     const { subject } = req.query;
     const filter = {};
     if (subject) filter.subject = subject;
-    const manuals = await LabManual.find(filter).populate('subject', 'name code').sort({ createdAt: -1 });
+    const manuals = await LabManual.find(filter)
+      .populate('subject', 'name code')
+      .sort({ createdAt: -1 });
     res.json({ success: true, data: manuals });
   } catch (err) {
     next(err);
@@ -17,18 +19,20 @@ const getLabManuals = async (req, res, next) => {
 const createLabManual = async (req, res, next) => {
   try {
     const { title, subject, chapter, description } = req.body;
-    if (!req.file) return res.status(400).json({ success: false, message: 'PDF file is required.' });
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'PDF file is required.' });
+    }
 
     const manual = await LabManual.create({
       title,
       subject,
-      chapter,
+      chapter: chapter || undefined,
       description,
       file: {
         originalName: req.file.originalname,
         storedName: req.file.filename,
         path: `labmanuals/${req.file.filename}`,
-        mimeType: req.file.mimetype,
+        mimeType: req.file.mimetype || 'application/pdf',
         size: req.file.size,
       },
       createdBy: req.user._id,
@@ -48,7 +52,7 @@ const updateLabManual = async (req, res, next) => {
         originalName: req.file.originalname,
         storedName: req.file.filename,
         path: `labmanuals/${req.file.filename}`,
-        mimeType: req.file.mimetype,
+        mimeType: req.file.mimetype || 'application/pdf',
         size: req.file.size,
       };
     }
@@ -56,7 +60,9 @@ const updateLabManual = async (req, res, next) => {
       new: true,
       runValidators: true,
     });
-    if (!manual) return res.status(404).json({ success: false, message: 'Lab manual not found.' });
+    if (!manual) {
+      return res.status(404).json({ success: false, message: 'Lab manual not found.' });
+    }
     res.json({ success: true, data: manual });
   } catch (err) {
     next(err);
@@ -66,10 +72,14 @@ const updateLabManual = async (req, res, next) => {
 const deleteLabManual = async (req, res, next) => {
   try {
     const manual = await LabManual.findByIdAndDelete(req.params.id);
-    if (!manual) return res.status(404).json({ success: false, message: 'Lab manual not found.' });
+    if (!manual) {
+      return res.status(404).json({ success: false, message: 'Lab manual not found.' });
+    }
     if (manual.file?.storedName) {
-      const filePath = path.join(__dirname, '..', 'uploads', 'labmanuals', manual.file.storedName);
-      fs.existsSync(filePath) && fs.unlinkSync(filePath);
+      const filePath = path.resolve(__dirname, '..', 'uploads', 'labmanuals', manual.file.storedName);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
     }
     res.json({ success: true, message: 'Lab manual deleted.' });
   } catch (err) {
@@ -80,9 +90,15 @@ const deleteLabManual = async (req, res, next) => {
 const downloadLabManual = async (req, res, next) => {
   try {
     const manual = await LabManual.findById(req.params.id);
-    if (!manual) return res.status(404).json({ success: false, message: 'Lab manual not found.' });
-    const filePath = path.join(__dirname, '..', 'uploads', 'labmanuals', manual.file.storedName);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, message: 'File missing.' });
+    if (!manual || !manual.file?.storedName) {
+      return res.status(404).json({ success: false, message: 'Lab manual or file record not found.' });
+    }
+    const filePath = path.resolve(__dirname, '..', 'uploads', 'labmanuals', manual.file.storedName);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'File is missing on the server storage.' });
+    }
+
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
     res.download(filePath, manual.file.originalName);
   } catch (err) {
     next(err);
@@ -92,14 +108,28 @@ const downloadLabManual = async (req, res, next) => {
 const viewLabManual = async (req, res, next) => {
   try {
     const manual = await LabManual.findById(req.params.id);
-    if (!manual) return res.status(404).json({ success: false, message: 'Lab manual not found.' });
-    const filePath = path.join(__dirname, '..', 'uploads', 'labmanuals', manual.file.storedName);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, message: 'File missing.' });
+    if (!manual || !manual.file?.storedName) {
+      return res.status(404).json({ success: false, message: 'Lab manual or file record not found.' });
+    }
 
-    // Set headers for in-browser rendering
-    res.setHeader('Content-Type', manual.file.mimeType || 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${manual.file.originalName}"`);
-    res.sendFile(filePath);
+    const filePath = path.resolve(__dirname, '..', 'uploads', 'labmanuals', manual.file.storedName);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'File is missing on the server storage.' });
+    }
+
+    const mimeType = manual.file.mimeType || 'application/pdf';
+    const stat = fs.statSync(filePath);
+
+    res.writeHead(200, {
+      'Content-Type': mimeType,
+      'Content-Length': stat.size,
+      'Content-Disposition': `inline; filename="${manual.file.originalName}"`,
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    const readStream = fs.createReadStream(filePath);
+    readStream.pipe(res);
   } catch (err) {
     next(err);
   }

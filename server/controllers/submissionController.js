@@ -1,4 +1,5 @@
 const Submission = require('../models/Submission');
+const Assignment = require('../models/Assignment');
 const path = require('path');
 const fs = require('fs');
 
@@ -24,10 +25,14 @@ const getSubmissions = async (req, res, next) => {
 const createSubmission = async (req, res, next) => {
   try {
     const { assignment: assignmentId } = req.body;
-    if (!req.file) return res.status(400).json({ success: false, message: 'Submission file is required.' });
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Submission file is required.' });
+    }
 
     const assignment = await Assignment.findById(assignmentId);
-    if (!assignment) return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    }
 
     const isLate = new Date() > new Date(assignment.deadline);
 
@@ -40,7 +45,7 @@ const createSubmission = async (req, res, next) => {
           originalName: req.file.originalname,
           storedName: req.file.filename,
           path: `submissions/${req.file.filename}`,
-          mimeType: req.file.mimetype,
+          mimeType: req.file.mimetype || 'application/pdf',
           size: req.file.size,
         },
         submittedAt: new Date(),
@@ -64,7 +69,9 @@ const updateSubmission = async (req, res, next) => {
       { marks, feedback, status: 'evaluated' },
       { new: true, runValidators: true }
     );
-    if (!submission) return res.status(404).json({ success: false, message: 'Submission not found.' });
+    if (!submission) {
+      return res.status(404).json({ success: false, message: 'Submission not found.' });
+    }
     res.json({ success: true, data: submission });
   } catch (err) {
     next(err);
@@ -74,15 +81,22 @@ const updateSubmission = async (req, res, next) => {
 const downloadSubmissionFile = async (req, res, next) => {
   try {
     const submission = await Submission.findById(req.params.id);
-    if (!submission) return res.status(404).json({ success: false, message: 'Submission not found.' });
+    if (!submission || !submission.file?.storedName) {
+      return res.status(404).json({ success: false, message: 'Submission or file record not found.' });
+    }
 
     // Students may only download their own submission file
-    if (req.user.role === 'student' && String(submission.student) !== String(req.user._id)) {
+    const studentOwnerId = submission.student?._id ? submission.student._id.toString() : submission.student.toString();
+    if (req.user.role === 'student' && studentOwnerId !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: 'Access denied.' });
     }
 
-    const filePath = path.join(__dirname, '..', 'uploads', 'submissions', submission.file.storedName);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, message: 'File missing.' });
+    const filePath = path.resolve(__dirname, '..', 'uploads', 'submissions', submission.file.storedName);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'File is missing on the server storage.' });
+    }
+
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
     res.download(filePath, submission.file.originalName);
   } catch (err) {
     next(err);
@@ -98,16 +112,29 @@ const viewSubmissionFile = async (req, res, next) => {
     }
 
     // Students may only view their own submission file
-    if (req.user.role === 'student' && String(submission.student) !== String(req.user._id)) {
+    const studentOwnerId = submission.student?._id ? submission.student._id.toString() : submission.student.toString();
+    if (req.user.role === 'student' && studentOwnerId !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: 'Access denied.' });
     }
 
-    const filePath = path.join(__dirname, '..', 'uploads', 'submissions', submission.file.storedName);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, message: 'File missing.' });
+    const filePath = path.resolve(__dirname, '..', 'uploads', 'submissions', submission.file.storedName);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'File missing on server storage.' });
+    }
 
-    res.setHeader('Content-Type', submission.file.mimeType || 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${submission.file.originalName}"`);
-    res.sendFile(filePath);
+    const mimeType = submission.file.mimeType || 'application/pdf';
+    const stat = fs.statSync(filePath);
+
+    res.writeHead(200, {
+      'Content-Type': mimeType,
+      'Content-Length': stat.size,
+      'Content-Disposition': `inline; filename="${submission.file.originalName}"`,
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    const readStream = fs.createReadStream(filePath);
+    readStream.pipe(res);
   } catch (err) {
     next(err);
   }

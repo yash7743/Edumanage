@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/auth');
 const { requireAdminRole } = require('../middleware/role');
 const { createUploader } = require('../middleware/upload');
 const {
@@ -23,8 +23,13 @@ router.get('/:id/view', viewLabManual);
 router.get('/:id/download', downloadLabManual);
 
 // Admin-only management routes
-router.post('/', requireAdminRole('super_admin', 'content_admin'), uploadManual.single('file'), createLabManual);
-router.put('/:id', requireAdminRole('super_admin', 'content_admin'), uploadManual.single('file'), updateLabManual);
-router.delete('/:id', requireAdminRole('super_admin', 'content_admin'), deleteLabManual);
+const adminGuard =
+  typeof requireAdminRole === 'function'
+    ? requireAdminRole('super_admin', 'content_admin')
+    : authorize('admin');
+
+router.post('/', adminGuard, uploadManual.single('file'), createLabManual);
+router.put('/:id', adminGuard, uploadManual.single('file'), updateLabManual);
+router.delete('/:id', adminGuard, deleteLabManual);
 
 module.exports = router;

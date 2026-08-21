@@ -20,7 +20,9 @@ const getAssignments = async (req, res, next) => {
 const getAssignmentById = async (req, res, next) => {
   try {
     const assignment = await Assignment.findById(req.params.id).populate('subject', 'name code');
-    if (!assignment) return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    }
     res.json({ success: true, data: assignment });
   } catch (err) {
     next(err);
@@ -31,14 +33,23 @@ const createAssignment = async (req, res, next) => {
   try {
     const { title, subject, chapter, description, startDate, deadline, maxMarks } = req.body;
 
-    const data = { title, subject, chapter, description, startDate, deadline, maxMarks, createdBy: req.user._id };
+    const data = {
+      title,
+      subject,
+      chapter: chapter || undefined,
+      description,
+      startDate,
+      deadline,
+      maxMarks,
+      createdBy: req.user._id,
+    };
 
     if (req.file) {
       data.file = {
         originalName: req.file.originalname,
         storedName: req.file.filename,
         path: `assignments/${req.file.filename}`,
-        mimeType: req.file.mimetype,
+        mimeType: req.file.mimetype || 'application/pdf',
         size: req.file.size,
       };
     }
@@ -53,20 +64,26 @@ const createAssignment = async (req, res, next) => {
 const updateAssignment = async (req, res, next) => {
   try {
     const updateData = { ...req.body };
+
     if (req.file) {
       updateData.file = {
         originalName: req.file.originalname,
         storedName: req.file.filename,
         path: `assignments/${req.file.filename}`,
-        mimeType: req.file.mimetype,
+        mimeType: req.file.mimetype || 'application/pdf',
         size: req.file.size,
       };
     }
+
     const assignment = await Assignment.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true,
     });
-    if (!assignment) return res.status(404).json({ success: false, message: 'Assignment not found.' });
+
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: 'Assignment not found.' });
+    }
+
     res.json({ success: true, data: assignment });
   } catch (err) {
     next(err);
@@ -76,11 +93,17 @@ const updateAssignment = async (req, res, next) => {
 const deleteAssignment = async (req, res, next) => {
   try {
     const assignment = await Assignment.findByIdAndDelete(req.params.id);
-    if (!assignment) return res.status(404).json({ success: false, message: 'Assignment not found.' });
-    if (assignment.file?.storedName) {
-      const filePath = path.join(__dirname, '..', 'uploads', 'assignments', assignment.file.storedName);
-      fs.existsSync(filePath) && fs.unlinkSync(filePath);
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: 'Assignment not found.' });
     }
+
+    if (assignment.file?.storedName) {
+      const filePath = path.resolve(__dirname, '..', 'uploads', 'assignments', assignment.file.storedName);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
     res.json({ success: true, message: 'Assignment deleted.' });
   } catch (err) {
     next(err);
@@ -91,10 +114,15 @@ const downloadAssignmentFile = async (req, res, next) => {
   try {
     const assignment = await Assignment.findById(req.params.id);
     if (!assignment || !assignment.file?.storedName) {
-      return res.status(404).json({ success: false, message: 'File not found.' });
+      return res.status(404).json({ success: false, message: 'Assignment or file record not found.' });
     }
-    const filePath = path.join(__dirname, '..', 'uploads', 'assignments', assignment.file.storedName);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, message: 'File missing.' });
+
+    const filePath = path.resolve(__dirname, '..', 'uploads', 'assignments', assignment.file.storedName);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'File is missing on server storage.' });
+    }
+
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
     res.download(filePath, assignment.file.originalName);
   } catch (err) {
     next(err);
@@ -107,14 +135,25 @@ const viewAssignmentFile = async (req, res, next) => {
     if (!assignment || !assignment.file?.storedName) {
       return res.status(404).json({ success: false, message: 'File not found.' });
     }
-    const filePath = path.join(__dirname, '..', 'uploads', 'assignments', assignment.file.storedName);
+
+    const filePath = path.resolve(__dirname, '..', 'uploads', 'assignments', assignment.file.storedName);
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ success: false, message: 'File missing on server.' });
     }
 
-    res.setHeader('Content-Type', assignment.file.mimeType || 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${assignment.file.originalName}"`);
-    res.sendFile(filePath);
+    const mimeType = assignment.file.mimeType || 'application/pdf';
+    const stat = fs.statSync(filePath);
+
+    res.writeHead(200, {
+      'Content-Type': mimeType,
+      'Content-Length': stat.size,
+      'Content-Disposition': `inline; filename="${assignment.file.originalName}"`,
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    const readStream = fs.createReadStream(filePath);
+    readStream.pipe(res);
   } catch (err) {
     next(err);
   }
